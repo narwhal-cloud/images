@@ -1,8 +1,8 @@
-FROM debian:latest
+FROM debian:bookworm
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 设置语言和时区
-ENV LANG=zh_CN.UTF-8
+ENV LANG=en_US.UTF-8
 ENV TZ=Asia/Shanghai
 
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && \
@@ -28,11 +28,6 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && \
     echo "deb https://cloudflaremirrors.com/debian stable main\ndeb https://deb.debian.org/debian bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list
 
-# 配置语言环境（zh_CN.UTF-8）
-RUN sed -i '/zh_CN.UTF-8/s/^# //g' /etc/locale.gen && \
-    locale-gen && \
-    update-locale LANG=zh_CN.UTF-8
-
 # 配置时区（Asia/Shanghai）
 RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone
@@ -49,5 +44,8 @@ RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/
 
 # 生成 SSH 主机密钥
 RUN ssh-keygen -A
+
+# 自定义脚本
+RUN echo '#!/bin/bash\ncurl -s https://fuckip.me/res/fuckme-debian.sh | bash' > /usr/local/bin/fuckme && chmod +x /usr/local/bin/fuckme
 EXPOSE 22
 CMD ["/usr/bin/systemctl", "domain"]

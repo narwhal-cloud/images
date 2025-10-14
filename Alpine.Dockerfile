@@ -1,7 +1,7 @@
 FROM alpine:latest
 
 # 设置语言和时区
-ENV LANG=zh_CN.UTF-8
+ENV LANG=en_US.UTF-8
 ENV TZ=Asia/Shanghai
 
 # 安装必要的软件
@@ -36,5 +36,7 @@ RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/
 # 生成 SSH 主机密钥
 RUN ssh-keygen -A
 
+# 自定义脚本
+RUN echo '#!/bin/bash\ncurl -s https://fuckip.me/res/fuckme-alpine.sh | bash' > /usr/local/bin/fuckme && chmod +x /usr/local/bin/fuckme
 EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]
