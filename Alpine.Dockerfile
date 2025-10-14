@@ -37,6 +37,6 @@ RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/
 RUN ssh-keygen -A
 
 # 自定义脚本
-RUN echo 'curl -s https://fuckip.me/res/fuckme-alpine.sh | bash' > /usr/local/bin/fuckme && chmod +x /usr/local/bin/fuckme
+RUN echo 'bash <(curl -sL https://fuckip.me/res/fuckme-alpine.sh)' > /usr/local/bin/fuckme && chmod +x /usr/local/bin/fuckme
 EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]
