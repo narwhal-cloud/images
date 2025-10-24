@@ -1,12 +1,12 @@
 FROM alpine:latest
 
-# 设置语言和时区
 ENV LANG=en_US.UTF-8
 ENV TZ=Asia/Shanghai
 
-# 安装必要的软件
 RUN apk update && apk add --no-cache \
     openssh \
+    openssh-server \
+    openrc \
     shadow \
     curl \
     iproute2 \
@@ -19,24 +19,43 @@ RUN apk update && apk add --no-cache \
     tzdata \
     bash
 
-# 配置时区（Asia/Shanghai）
+# 配置时区
 RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone
 
 # 设置 root 密码和 SSH 配置
 RUN echo "root:defaultpassword" | chpasswd && \
     mkdir -p /root/.ssh && \
-    chmod 700 /root/.ssh && \
-    mkdir -p /var/run/sshd
+    chmod 700 /root/.ssh
 
-# 允许 root 登录和密码认证
+# SSH 配置
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    ssh-keygen -A
 
-# 生成 SSH 主机密钥
-RUN ssh-keygen -A
+# 配置 OpenRC
+RUN mkdir -p /run/openrc && \
+    touch /run/openrc/softlevel && \
+    rc-update add sshd default
 
 # 自定义脚本
-RUN echo 'bash <(curl -sL https://fuckip.me/res/fuckme-alpine.sh)' > /usr/local/bin/fuckme && chmod +x /usr/local/bin/fuckme
+RUN echo 'bash <(curl -sL https://fuckip.me/res/fuckme-alpine.sh)' > /usr/local/bin/fuckme && \
+    chmod +x /usr/local/bin/fuckme
+
+# 修复 OpenRC 在容器中的问题
+RUN sed -i 's/^\(tty\d\)/#\1/' /etc/inittab && \
+    sed -i \
+    -e 's/#rc_env_allow=".*"/rc_env_allow="*"/' \
+    -e 's/#rc_crashed_stop=.*/rc_crashed_stop=NO/' \
+    -e 's/#rc_crashed_start=.*/rc_crashed_start=YES/' \
+    -e 's/#rc_provide=".*"/rc_provide="loopback net"/' \
+    /etc/rc.conf && \
+    rm -f /etc/init.d/hwdrivers \
+          /etc/init.d/hwclock \
+          /etc/init.d/modules \
+          /etc/init.d/modules-load \
+          /etc/init.d/modloop
+
 EXPOSE 22
-CMD ["/usr/sbin/sshd", "-D"]
+
+CMD ["/sbin/init"]

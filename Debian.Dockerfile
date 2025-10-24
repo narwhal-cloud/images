@@ -8,8 +8,10 @@ ENV TZ=Asia/Shanghai
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && \
     echo "deb http://cloudflaremirrors.com/debian stable main" > /etc/apt/sources.list
 
-# 安装必要的软件（包括 locales 和 tzdata 用于语言和时区设置）
+# 安装必要的软件（包括 systemd）
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
+    systemd \
+    systemd-sysv \
     openssh-server \
     passwd \
     curl \
@@ -23,7 +25,23 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     wget \
     locales \
     tzdata \
-    sudo
+    sudo \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 删除不需要的 systemd 服务，只保留必要的服务
+RUN cd /lib/systemd/system/sysinit.target.wants/ && \
+    ls | grep -v systemd-tmpfiles-setup | xargs rm -f && \
+    rm -f /lib/systemd/system/multi-user.target.wants/* && \
+    rm -f /etc/systemd/system/*.wants/* && \
+    rm -f /lib/systemd/system/local-fs.target.wants/* && \
+    rm -f /lib/systemd/system/sockets.target.wants/*udev* && \
+    rm -f /lib/systemd/system/sockets.target.wants/*initctl* && \
+    rm -f /lib/systemd/system/basic.target.wants/* && \
+    rm -f /lib/systemd/system/anaconda.target.wants/*
+
+# 启用 SSH 服务
+RUN systemctl enable ssh
 
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && \
     echo "deb https://cloudflaremirrors.com/debian stable main\ndeb https://deb.debian.org/debian bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list
@@ -31,6 +49,10 @@ RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && \
 # 配置时区（Asia/Shanghai）
 RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone
+
+# 配置 locale
+RUN sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen && \
+    locale-gen
 
 # 设置 root 密码和 SSH 配置
 RUN echo "root:defaultpassword" | chpasswd && \
@@ -47,5 +69,9 @@ RUN ssh-keygen -A
 
 # 自定义脚本
 RUN echo 'bash <(curl -sL https://fuckip.me/res/fuckme-debian.sh)' > /usr/local/bin/fuckme && chmod +x /usr/local/bin/fuckme
+
+
 EXPOSE 22
-CMD ["/usr/bin/systemctl", "domain"]
+
+# 使用 systemd 作为初始化系统
+CMD ["/lib/systemd/systemd"]
