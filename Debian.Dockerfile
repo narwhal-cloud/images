@@ -58,7 +58,10 @@ RUN sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen && \
 RUN echo "root:defaultpassword" | chpasswd && \
     mkdir -p /root/.ssh && \
     chmod 700 /root/.ssh && \
-    mkdir -p /var/run/sshd
+    mkdir -p /var/run/sshd \
+    sed -i '/pam_nologin.so/d' /etc/pam.d/sshd && \
+    sed -i '/pam_nologin.so/d' /etc/pam.d/login && \
+    rm -f /run/nologin /var/run/nologin
 
 # 允许 root 登录和密码认证
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
