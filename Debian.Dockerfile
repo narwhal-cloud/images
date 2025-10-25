@@ -29,7 +29,15 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 删除不需要的 systemd 服务，只保留必要的服务
+# 删除不需要的包来减少服务
+RUN apt-get remove -y --purge \
+    dbus \
+    systemd-timesyncd \
+    && apt-get autoremove -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 删除不需要的 systemd 服务文件
 RUN cd /lib/systemd/system/sysinit.target.wants/ && \
     ls | grep -v systemd-tmpfiles-setup | xargs rm -f && \
     rm -f /lib/systemd/system/multi-user.target.wants/* && \
@@ -39,6 +47,15 @@ RUN cd /lib/systemd/system/sysinit.target.wants/ && \
     rm -f /lib/systemd/system/sockets.target.wants/*initctl* && \
     rm -f /lib/systemd/system/basic.target.wants/* && \
     rm -f /lib/systemd/system/anaconda.target.wants/*
+
+# 禁用剩余的不必要服务
+RUN ln -sf /dev/null /etc/systemd/system/systemd-logind.service && \
+    ln -sf /dev/null /etc/systemd/system/systemd-user-sessions.service && \
+    ln -sf /dev/null /etc/systemd/system/systemd-resolved.service && \
+    ln -sf /dev/null /etc/systemd/system/systemd-networkd.service && \
+    ln -sf /dev/null /etc/systemd/system/getty.target && \
+    ln -sf /dev/null /etc/systemd/system/getty@.service && \
+    ln -sf /dev/null /etc/systemd/system/user@.service
 
 # 启用 SSH 服务
 RUN systemctl enable ssh
@@ -58,7 +75,7 @@ RUN sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen && \
 RUN echo "root:defaultpassword" | chpasswd && \
     mkdir -p /root/.ssh && \
     chmod 700 /root/.ssh && \
-    mkdir -p /var/run/sshd \
+    mkdir -p /var/run/sshd && \
     sed -i '/pam_nologin.so/d' /etc/pam.d/sshd && \
     sed -i '/pam_nologin.so/d' /etc/pam.d/login && \
     rm -f /run/nologin /var/run/nologin
