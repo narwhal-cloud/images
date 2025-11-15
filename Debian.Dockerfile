@@ -1,4 +1,4 @@
-FROM debian:bookworm
+FROM debian:latest
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 设置语言和时区
@@ -25,9 +25,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     wget \
     locales \
     tzdata \
-    sudo \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    sudo
 
 # 删除不需要的包来减少服务
 RUN apt-get remove -y --purge \
