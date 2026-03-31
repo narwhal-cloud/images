@@ -1,7 +1,6 @@
 FROM alpine:latest
 
 ENV LANG=en_US.UTF-8
-ENV TZ=Asia/Shanghai
 
 RUN apk update && apk add --no-cache \
     openssh-server \
@@ -19,10 +18,6 @@ RUN apk update && apk add --no-cache \
     bash \
     && rm -rf /var/cache/apk/*
 
-# 配置时区
-RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo $TZ > /etc/timezone
-
 # 设置 root 密码和 SSH 配置
 RUN echo "root:defaultpassword" | chpasswd && \
     mkdir -p /root/.ssh && \
@@ -38,9 +33,6 @@ RUN mkdir -p /run/openrc && \
     touch /run/openrc/softlevel && \
     rc-update add sshd default
 
-# 自定义脚本
-RUN echo 'bash <(curl -sL https://fuckip.me/res/fuckme-alpine.sh)' > /usr/local/bin/fuckme && \
-    chmod +x /usr/local/bin/fuckme
 
 # 修复 OpenRC 在容器中的问题并禁用不必要的服务
 RUN sed -i 's/^\(tty\d\)/#\1/' /etc/inittab && \

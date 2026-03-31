@@ -1,9 +1,6 @@
 FROM debian:latest
-ENV DEBIAN_FRONTEND=noninteractive
 
-# 设置语言和时区
 ENV LANG=en_US.UTF-8
-ENV TZ=Asia/Shanghai
 
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && \
     echo "deb http://cloudflaremirrors.com/debian stable main" > /etc/apt/sources.list
@@ -61,10 +58,6 @@ RUN systemctl enable ssh
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && \
     echo "deb https://cloudflaremirrors.com/debian stable main\ndeb https://deb.debian.org/debian bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list
 
-# 配置时区（Asia/Shanghai）
-RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo $TZ > /etc/timezone
-
 # 配置 locale
 RUN sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen && \
     locale-gen
@@ -84,10 +77,6 @@ RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/
 
 # 生成 SSH 主机密钥
 RUN ssh-keygen -A
-
-# 自定义脚本
-RUN echo 'bash <(curl -sL https://fuckip.me/res/fuckme-debian.sh)' > /usr/local/bin/fuckme && chmod +x /usr/local/bin/fuckme
-
 
 EXPOSE 22
 
