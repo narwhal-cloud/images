@@ -75,8 +75,11 @@ RUN echo "root:defaultpassword" | chpasswd && \
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
-# 生成 SSH 主机密钥
-RUN ssh-keygen -A
+# 删除装包时生成的 host key,改为容器首次启动时生成(避免所有容器共用同一套 key)
+RUN rm -f /etc/ssh/ssh_host_* && \
+    mkdir -p /etc/systemd/system/ssh.service.d && \
+    printf '[Service]\nExecStartPre=/usr/bin/ssh-keygen -A\n' \
+      > /etc/systemd/system/ssh.service.d/host-keygen.conf
 
 EXPOSE 22
 
