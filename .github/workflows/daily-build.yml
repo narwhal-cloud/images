@@ -41,3 +41,82 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: narwhalcloud/alpine:podman
+
+  build-cloudhv:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        distro: [debian, alpine]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y qemu-utils fdisk zstd wget
+
+      - name: Build cloud-hypervisor image
+        run: sudo bash cloudhv-build.sh ${{ matrix.distro }} amd64 dist
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudhv-${{ matrix.distro }}-amd64
+          path: dist/*
+          retention-days: 3
+
+  build-incus:
+    strategy:
+      matrix:
+        include:
+          - { distro: debian, arch: amd64, runner: ubuntu-latest }
+          - { distro: alpine, arch: amd64, runner: ubuntu-latest }
+          - { distro: debian, arch: arm64, runner: ubuntu-24.04-arm }
+          - { distro: alpine, arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Incus
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y incus
+          sudo incus admin init --auto
+          # Docker sets the FORWARD policy to DROP, which breaks Incus bridge networking
+          sudo iptables -P FORWARD ACCEPT || true
+          sudo ip6tables -P FORWARD ACCEPT || true
+
+      - name: Build Incus ready image
+        run: sudo bash incus-build.sh ${{ matrix.distro }} ${{ matrix.arch }} dist
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: incus-${{ matrix.distro }}-${{ matrix.arch }}
+          path: dist/*
+          retention-days: 3
+
+  release-vm-images:
+    needs: [build-cloudhv, build-incus]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Rolling release of prebuilt cloud-hypervisor and Incus system images for runman-agent. Last updated: $(date -u +%F)"
+          gh release view vm-latest >/dev/null 2>&1 \
+            || gh release create vm-latest --title "Prebuilt VM images" --notes "$NOTES"
+          gh release upload vm-latest dist/* --clobber
+          gh release edit vm-latest --notes "$NOTES"
