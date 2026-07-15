@@ -74,6 +74,51 @@ extract_kernel() {
     log "Kernel: $(basename "$vmlinuz")"
 }
 
+# Bake sshd root-login config into a mounted rootfs. runman-agent's per-instance
+# cloud-init no longer touches sshd config, so it must be correct in the image.
+configure_sshd() {
+    local root="$1"
+    mkdir -p "$root/etc/ssh/sshd_config.d"
+    printf 'PermitRootLogin yes\nPasswordAuthentication yes\n' > "$root/etc/ssh/sshd_config.d/99-runman.conf"
+    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' "$root/etc/ssh/sshd_config"
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' "$root/etc/ssh/sshd_config"
+}
+
+# Preinstall the packages runman-agent's cloud-init used to install at every
+# boot (report-memory needs curl, resize needs e2fsprogs/growpart).
+customize_debian_rootfs() {
+    local raw="$1"
+    local mnt offset size o s best_size=0
+    while read -r o s; do
+        if [ "$s" -gt "$best_size" ]; then best_size="$s"; offset="$o"; size="$s"; fi
+    done < <(list_partitions "$raw")
+    [ "$best_size" -gt 0 ] || { echo "no partitions found in $raw" >&2; exit 1; }
+
+    mnt=$(mktemp -d)
+    mount -o loop,offset="$offset",sizelimit="$size" "$raw" "$mnt"
+    mount -t proc proc "$mnt/proc"
+    mount --bind /dev "$mnt/dev"
+
+    mv "$mnt/etc/resolv.conf" "$mnt/etc/resolv.conf.bak" 2>/dev/null || true
+    echo "nameserver 1.1.1.1" > "$mnt/etc/resolv.conf"
+    # Prevent maintainer scripts from starting services inside the chroot
+    printf '#!/bin/sh\nexit 101\n' > "$mnt/usr/sbin/policy-rc.d"
+    chmod +x "$mnt/usr/sbin/policy-rc.d"
+
+    log "Baking packages into rootfs (debian)..."
+    chroot "$mnt" env DEBIAN_FRONTEND=noninteractive sh -c \
+        'apt-get update && apt-get install -y curl e2fsprogs cloud-guest-utils openssh-server && apt-get clean && rm -rf /var/lib/apt/lists/*'
+    chroot "$mnt" systemctl enable ssh >/dev/null 2>&1 || true
+
+    rm -f "$mnt/usr/sbin/policy-rc.d" "$mnt/etc/resolv.conf"
+    mv "$mnt/etc/resolv.conf.bak" "$mnt/etc/resolv.conf" 2>/dev/null || true
+    configure_sshd "$mnt"
+
+    umount "$mnt/dev"
+    umount "$mnt/proc"
+    umount "$mnt" && rmdir "$mnt"
+}
+
 build_debian() {
     local base="https://cloud.debian.org/images/cloud/trixie/latest"
     local name="debian-13-generic-${ARCH}.qcow2"
@@ -91,6 +136,7 @@ build_debian() {
     qemu-img convert -f qcow2 -O raw "$WORK/image.qcow2" "$WORK/current.raw"
     rm -f "$WORK/image.qcow2"
 
+    customize_debian_rootfs "$WORK/current.raw"
     extract_kernel "$WORK/current.raw" "$WORK"
     echo "root=/dev/vda1 rw console=ttyS0,115200" > "$WORK/cmdline"
     echo "debian-13-$(date -u +%Y%m%d)" > "$WORK/version"
@@ -151,11 +197,21 @@ build_alpine() {
     # Alpine nocloud image has no partition table — raw ext4 filesystem on the device.
     local mnt
     mnt=$(mktemp -d)
-    mount -o loop,ro "$WORK/current.raw" "$mnt"
+    mount -o loop "$WORK/current.raw" "$mnt"
     cp "$mnt/boot/vmlinuz-virt"   "$WORK/vmlinuz"
     cp "$mnt/boot/initramfs-virt" "$WORK/initrd"
-    umount "$mnt" && rmdir "$mnt"
     log "Kernel: vmlinuz-virt"
+
+    log "Baking packages into rootfs (alpine)..."
+    mv "$mnt/etc/resolv.conf" "$mnt/etc/resolv.conf.bak" 2>/dev/null || true
+    echo "nameserver 1.1.1.1" > "$mnt/etc/resolv.conf"
+    chroot "$mnt" /sbin/apk add --no-cache curl e2fsprogs openssh
+    rm -f "$mnt/etc/resolv.conf"
+    mv "$mnt/etc/resolv.conf.bak" "$mnt/etc/resolv.conf" 2>/dev/null || true
+    configure_sshd "$mnt"
+    ln -sf /etc/init.d/sshd "$mnt/etc/runlevels/default/sshd"
+
+    umount "$mnt" && rmdir "$mnt"
 
     local root_uuid
     root_uuid=$(blkid -s UUID -o value "$WORK/current.raw")

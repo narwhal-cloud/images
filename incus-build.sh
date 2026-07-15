@@ -55,8 +55,10 @@ incus exec "$BUILDER" -- sh -c "mkdir -p /etc/ssh/sshd_config.d && printf 'Permi
 incus exec "$BUILDER" -- sh -c "sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config"
 if [ "$DISTRO" = "alpine" ]; then
     incus exec "$BUILDER" -- sh -c 'rc-update add sshd default || true'
+    incus exec "$BUILDER" -- sh -c 'rc-update add cronie default || true'
 else
     incus exec "$BUILDER" -- sh -c 'systemctl enable ssh || true'
+    incus exec "$BUILDER" -- sh -c 'systemctl enable cron || true'
 fi
 
 # Never publish an image without sshd
