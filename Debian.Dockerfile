@@ -78,7 +78,7 @@ RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/
 # 删除装包时生成的 host key,改为容器首次启动时生成(避免所有容器共用同一套 key)
 RUN rm -f /etc/ssh/ssh_host_* && \
     mkdir -p /etc/systemd/system/ssh.service.d && \
-    printf '[Service]\nExecStartPre=/usr/bin/ssh-keygen -A\n' \
+    printf '[Service]\nExecStartPre=\nExecStartPre=/usr/bin/ssh-keygen -A\nExecStartPre=/usr/sbin/sshd -t\n' \
       > /etc/systemd/system/ssh.service.d/host-keygen.conf
 
 EXPOSE 22
