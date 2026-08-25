@@ -50,8 +50,24 @@ for i in $(seq 1 10); do
 done
 [ "$ok" -eq 1 ] || { echo "package installation failed" >&2; exit 1; }
 
-log "Configuring sshd..."
-incus exec "$BUILDER" -- sh -c "mkdir -p /etc/ssh/sshd_config.d && printf 'PermitRootLogin yes\nPasswordAuthentication yes\nListenAddress 0.0.0.0\nListenAddress ::\n' > /etc/ssh/sshd_config.d/99-runman.conf"
+log "Configuring root access and sshd..."
+incus exec "$BUILDER" -- sh -c "echo 'root:defaultpassword' | chpasswd && mkdir -p /root/.ssh && chmod 700 /root/.ssh"
+incus exec "$BUILDER" -- sh -c "rm -f /etc/securetty"
+
+# Cloud-init by default disables root login and password authentication on boot.
+# Override both in the main config and drop-in directory so root login remains permitted.
+incus exec "$BUILDER" -- sh -c '
+    if [ -f /etc/cloud/cloud.cfg ]; then
+        sed -i "s/disable_root:.*/disable_root: false/" /etc/cloud/cloud.cfg
+        sed -i "s/ssh_pwauth:.*/ssh_pwauth: true/" /etc/cloud/cloud.cfg
+    fi
+    if [ -d /etc/cloud/cloud.cfg.d ]; then
+        printf "disable_root: false\nssh_pwauth: true\n" > /etc/cloud/cloud.cfg.d/99-runman.cfg
+    fi
+' || true
+
+# SSH daemon configuration (00- and 99- prefixes ensure precedence before and after other drop-ins)
+incus exec "$BUILDER" -- sh -c "mkdir -p /etc/ssh/sshd_config.d && printf 'PermitRootLogin yes\nPasswordAuthentication yes\nListenAddress 0.0.0.0\nListenAddress ::\n' > /etc/ssh/sshd_config.d/00-runman.conf && cp /etc/ssh/sshd_config.d/00-runman.conf /etc/ssh/sshd_config.d/99-runman.conf"
 incus exec "$BUILDER" -- sh -c "sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config"
 if [ "$DISTRO" = "alpine" ]; then
     incus exec "$BUILDER" -- sh -c 'rc-update add sshd default || true'

@@ -74,12 +74,24 @@ extract_kernel() {
     log "Kernel: $(basename "$vmlinuz")"
 }
 
-# Bake sshd root-login config into a mounted rootfs. runman-agent's per-instance
+# Bake sshd and root-login config into a mounted rootfs. runman-agent's per-instance
 # cloud-init no longer touches sshd config, so it must be correct in the image.
 configure_sshd() {
     local root="$1"
+    chroot "$root" sh -c "echo 'root:defaultpassword' | chpasswd && mkdir -p /root/.ssh && chmod 700 /root/.ssh" 2>/dev/null || true
+    rm -f "$root/etc/securetty"
+
+    if [ -f "$root/etc/cloud/cloud.cfg" ]; then
+        sed -i 's/disable_root:.*/disable_root: false/' "$root/etc/cloud/cloud.cfg" 2>/dev/null || true
+        sed -i 's/ssh_pwauth:.*/ssh_pwauth: true/' "$root/etc/cloud/cloud.cfg" 2>/dev/null || true
+    fi
+    if [ -d "$root/etc/cloud/cloud.cfg.d" ]; then
+        printf 'disable_root: false\nssh_pwauth: true\n' > "$root/etc/cloud/cloud.cfg.d/99-runman.cfg"
+    fi
+
     mkdir -p "$root/etc/ssh/sshd_config.d"
-    printf 'PermitRootLogin yes\nPasswordAuthentication yes\n' > "$root/etc/ssh/sshd_config.d/99-runman.conf"
+    printf 'PermitRootLogin yes\nPasswordAuthentication yes\nListenAddress 0.0.0.0\nListenAddress ::\n' > "$root/etc/ssh/sshd_config.d/00-runman.conf"
+    cp "$root/etc/ssh/sshd_config.d/00-runman.conf" "$root/etc/ssh/sshd_config.d/99-runman.conf"
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' "$root/etc/ssh/sshd_config"
     sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' "$root/etc/ssh/sshd_config"
 }

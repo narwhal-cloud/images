@@ -21,11 +21,15 @@ RUN apk update && apk add --no-cache \
 # 设置 root 密码和 SSH 配置
 RUN echo "root:defaultpassword" | chpasswd && \
     mkdir -p /root/.ssh && \
-    chmod 700 /root/.ssh
+    chmod 700 /root/.ssh && \
+    rm -f /etc/securetty
 
 # SSH 配置(host key 不在构建时生成,由 OpenRC sshd 脚本在容器首次启动时生成)
-RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+RUN mkdir -p /etc/ssh/sshd_config.d && \
+    printf 'PermitRootLogin yes\nPasswordAuthentication yes\nListenAddress 0.0.0.0\nListenAddress ::\n' > /etc/ssh/sshd_config.d/00-runman.conf && \
+    cp /etc/ssh/sshd_config.d/00-runman.conf /etc/ssh/sshd_config.d/99-runman.conf && \
+    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
 # 配置 OpenRC
 RUN mkdir -p /run/openrc && \
