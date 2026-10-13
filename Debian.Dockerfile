@@ -52,6 +52,12 @@ RUN ln -sf /dev/null /etc/systemd/system/systemd-logind.service && \
     ln -sf /dev/null /etc/systemd/system/getty@.service && \
     ln -sf /dev/null /etc/systemd/system/user@.service
 
+# 限制 journald 内存占用:默认日志存于 /run/log/journal(tmpfs),上限为 /run 大小的 10%,
+# 会计入实例内存且面板 RAM 不显示,小内存套餐会被挤进 swap
+RUN mkdir -p /etc/systemd/journald.conf.d && \
+    printf '[Journal]\nStorage=volatile\nRuntimeMaxUse=8M\nRuntimeMaxFileSize=2M\n' \
+      > /etc/systemd/journald.conf.d/00-runman.conf
+
 # 启用 SSH 服务
 RUN systemctl enable ssh
 
